@@ -1,2 +1,2 @@
 # 4D2_coursework_3
-Coursework 3 code for gridshell roof formfinding
+Coursework 3 code for gridshell roof form finding
