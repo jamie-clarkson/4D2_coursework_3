@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import scipy as sp
 from scipy import ndimage, misc
-import cv2 
+
 import meshzoo
 
 from matplotlib import cm
@@ -1048,28 +1048,6 @@ mean_force = np.mean(total_forces)
 vs = points*0
 ms = points*0+0.4
 
-"""Using an image to give you the boundary nodes (experimented with but ultimately not used here)"""     
-def generate_domain_from_image(image_adress,x_domain_length,y_domain_length):  #not currently used
-    
-    #need to produce p, boundaries, boundary selector
-    img=cv2.imread(image_adress,0) 
-    h, w = img.shape[:2]
-
-    resizeImg = cv2.resize(img, (x_domain_length, y_domain_length))
-    retval,mask_img = cv2.threshold(resizeImg, 100, 255, cv2.THRESH_BINARY) 
-    boundary_selector = mask_img/255
-
-    mask_img = mask_img/255
-    return mask_img
-
-im_ad = 'boundary_inkscape_3.png'
-
-global mask_img
-mask_img = generate_domain_from_image(im_ad, N_nodes_x, N_nodes_x)
-plt.imshow(mask_img,cmap = cmap1)
-plt.show()
-
-# point x,y --> image (interpolate) --> yes/no
 
 """ Check if a point is on the boundary """ 
 def is_boundary_point(point,mask):
