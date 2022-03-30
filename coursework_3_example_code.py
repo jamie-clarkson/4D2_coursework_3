@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import scipy as sp
 from scipy import ndimage, misc
-
+%matplotlib inline
 import meshzoo
 
 from matplotlib import cm
@@ -44,6 +44,7 @@ points, cells = meshzoo.rectangle_tri(
     variant="zigzag",  # or "up", "down", "center"
 )
 
+points_original = points[:]
 """ Need to modify points to create arched grid"""
 points_mod = []
 new_arch = []
@@ -112,6 +113,19 @@ for cell in cells:
                 left_arch_bars.append(0)
                 
 edges_b.append([N_nodes_x - 1,N_nodes_x*N_nodes_y -1])
+""" Need to add the arch cell"""
+new_cell = [] 
+i = 0
+for p in points_original:
+    x = p[0]
+    if x == L_width_x/2:
+        new_cell.append(i)        
+    i+=1
+ 
+cells_all = cells[:]      
+cells_all = list(cells_all) 
+cells_all.append(new_cell)
+
 new_arch_bars.append(0)
 left_arch_bars.append(0)
 
@@ -734,6 +748,7 @@ rection_points = []
 for i in range(0,len(points_2d)):
     if i not in rection_points:
         non_reaction_points.append(i)
+print('here')
 eq,mechanisms,self_stress_states = EQ_matrix2D(points_2d,edges_b,non_reaction_points)
 
 #self_stress_states = np.load('self_stress_states_21.npy')
@@ -993,6 +1008,43 @@ def plot_views_quick(mesh_points):
     ax = plt.axes(projection='3d')
 
     ax.scatter3D(x,y,z,color='b')
+
+"""Plot how out of balance a state of stress is""" 
+def plot_views_quick_out_of_balance(mesh_points,eq_results):
+    eq_results = np.transpose(eq_results)[0]
+    print(eq_results)
+    xs = []
+    ys = []
+    for i in range(0,len(eq_results)):
+        f = eq_results[i]
+        if i%2 == 0:
+            xs.append(f)
+        else:
+            ys.append(f)
+    xs = np.array(xs)
+    ys = np.array(ys)
+    tots = (xs**2 + ys**2)**0.5
+    max_tot = max(tots)
+    mesh_points = np.transpose(mesh_points)
+    x = mesh_points[0]
+    y = mesh_points[1]
+    z = mesh_points[2]
+    fig= plt.figure(figsize=(6,6)) # set figure size to portrait
+    #ax = plt.axes(projection='3d')
+    #ax.view_init(elev=90, azim=0)
+    cols = []
+    for t in tots:
+        cols.append((t/max_tot,0,0,t/max_tot))
+    
+    plt.scatter(x,y,color=cols)
+    
+    ax = plt.gca()
+    ax.set_aspect(1)
+    ax.set_ylim(-70,70)
+    plt.savefig('out_of_balance.png',dpi=300)
+    plt.show()    
+
+
 
 
 plot_mesh(points, edges_b)
@@ -1356,74 +1408,333 @@ def plane_from_points(points):
     n = np.cross(v1,v2)   #not normalised 
     return n
 
-""" Slope from equation of a plane """
-def slope_from_n(n):
-    if n[2] != 0:
-        return (n[0]**2 + n[1]**2)**0.5/n[2]
-    else:
-        return 0
+""" Slope from a vector"""
+
+
+def slope_from_vector(v):
+    v = v/np.linalg.norm(v)
+    return v[2]/(v[0]**2 + v[1]**2)**0.5
+
 """ Forces from a given airy stress function (not working)"""    
-def forces_from_airy(points,edges,cells):
+
+def forces_from_airy(these_points,edges,cells):
     # not quite fully working yet
     airy_forces = []
     for edge in edges:  #for each edge in the mesh
+    
+    
+        edge_vector = np.array(these_points[edge[1]])-np.array(these_points[edge[0]])
+
         #need to find the two adjoining cells. Brute force search for now
+        
         adjoining_cells = []
         for cell in cells:
-            if edge[0] in cell and edge[1] in cell:
-                adjoining_cells.append(cell)
+            if edge[0] in cell and edge[1] in cell:  #cells gives the three poitns in the cell - so we need to add the points
+                adjoining_cells.append(list(cell))
         #we now have the one or two cells
-        
-        if len(adjoining_cells) == 2:
-            cell_1 = adjoining_cells[0]
-            cell_2 = adjoining_cells[1]
-            #points_1 = [points[i] for i in cell_1]
-            #points_2 = [points[i] for i in cell_2]
+        #print(adjoining_cells)
+        if len(adjoining_cells) == 2:   #the edge is in two cells
+            if len(adjoining_cells[0]) <= 3 and len(adjoining_cells[1]) <= 3:
+                cell_1 = adjoining_cells[0]
+                cell_2 = adjoining_cells[1]
+                #points_1 = [points[i] for i in cell_1]
+                #points_2 = [points[i] for i in cell_2]
+                
+                p0 = these_points[edge[0]]
+                p1 = these_points[edge[1]]
+                
+                p2 = these_points[list(set(cell_1) - set(edge))[0]]
+                p3 = these_points[list(set(cell_2) - set(edge))[0]]
+                points_1 = [p0,p1,p2]
+                points_2 = [p0,p1,p3]
+                
+                #print('points 1',points_1)  #points sseem okay...
+                #print('points 2',points_2)  #points sseem okay...
+                
+            if len(adjoining_cells[0]) > 3 or len(adjoining_cells[1]) > 3:  #having some problems with this
+                #print('adj',adjoining_cells)
+                #print('cell contains 1600')
+                cell_1 = adjoining_cells[0]
+                cell_2 = adjoining_cells[1]
+                if len(cell_1) <=3:
+                    hold = cell_2
+                    cell_2 = cell_1[:]
+                    cell_1 = hold
+                #now cell 1 is the arch cell
+                p0 = these_points[edge[0]]
+                p1 = these_points[edge[1]]
+                
+                #p2 = (points[20]+points[860])/2   #mid point of tie
+                #how about choose somewhere on tie with same x?
+                y = (p0[1]+p1[1])/2  #y value of bar mid point
+                a = these_points[20]
+                b = these_points[860]
+                
+                p3 = ((y-a[1])/(b[1]-a[1]))*(b-a) + a   #trying  to get a point at similar location along tension tie 
+                #print(p2)
+                #p2 = these_points[440]
+                #p2 = (a+b)/2
+                
+                
+                p2 = these_points[list(set(cell_2) - set(edge))[0]]
+                #for points 1 let's use the original 
+                points_1 = [p0,p1,p2]
+                
+                #points_1 = [these_points[20],these_points[440],these_points[860]]  #this worked for stress- but not for finding mid points
+                points_2 = [p0,p1,p3]
+                
+                
+            edge_flattened = edge_vector*1
+            edge_flattened[2] = 0
+            edge_perp = np.cross(edge_flattened,np.array([0,0,1]))
+            edge_perp = edge_perp/np.linalg.norm(edge_perp)
+            mid_point = (p0+p1)/2
             
-            p0 = points[edge[0]]
-            p1 = points[edge[1]]
-            global p2,p3
-            p2 = points[list(set(cell_1) - set(edge))[0]]
-            p3 = points[list(set(cell_2) - set(edge))[0]]
-            points_1 = [p0,p1,p2]
-            points_2 = [p0,p1,p3]
+            above_point_1 = mid_point + 0.001*edge_perp
+            above_point_2 = mid_point - 0.001*edge_perp
+            
             
             n1 = plane_from_points(points_1)
+            d1 = np.dot(n1,p0)
+            
+            
             n2 = plane_from_points(points_2)
+            d2 = np.dot(n2,p0)
             
-            s1 = slope_from_n(n1)
-            s2 = slope_from_n(n2)
             
-            change_in_slope = s1-s2
+            #now ensure both vectors point up...
             
+            # if n1[2] <0 :
+            #     n1 = - n1
+            # if n2[2] <0 :
+            #     n2 = - n2
+            
+            proj_point_1_z = (d1-n1[0]*above_point_1[0] - n1[1]*above_point_1[1])/n1[2]
+            proj_point_1 = np.array([above_point_1[0],above_point_1[1],proj_point_1_z])
+            
+            proj_point_2_z = (d2-n2[0]*above_point_2[0] - n2[1]*above_point_2[1])/n2[2]
+            proj_point_2 = np.array([above_point_2[0],above_point_2[1],proj_point_2_z])
+            
+                        
+            
+
+            
+            #print(change_in_distance)
+            v1 = mid_point - proj_point_1
+            v2 = proj_point_2 - mid_point
+    
+            
+            s1 = slope_from_vector(v1)
+            s2 = slope_from_vector(v2)
+            
+            change_in_slope = s2-s1    
+            #print(s1,s2,change_in_slope)  #these seem too small for found points 2...
+            #print(' ')
+            
+            #change_in_slope = - abs(change_in_slope)  #this seemed to do the trick - but not a viable long term solution...
             airy_forces.append(change_in_slope)
-        if len(adjoining_cells) == 1:
-            cell_1 = adjoining_cells[0]
-            points_1 = [points[i] for i in cell_1]
-            n1 = plane_from_points(points_1)
-            s1 = slope_from_n(n1)
             
+        if len(adjoining_cells) == 1:  #bar is on the edge, so only in one cell - the other cell is below
+            if len(adjoining_cells[0]) <= 3:
+                cell_1 = adjoining_cells[0]
+                points_1 = [these_points[i] for i in cell_1]
+            
+            if len(adjoining_cells[0]) > 3:
+                #print('adj',adjoining_cells)
+                #for arch normal we want mid arch, and two support points
+                #points_1 = [points[20],points[860],points[440]]
+                points_1 = [these_points[20],these_points[860],these_points[440]]
+
+                mid_bar = (these_points[20] + these_points[860])/2
+                mid_arch = these_points[440]
+                slope_vec = mid_arch - mid_bar
+                slope = slope_from_vector(slope_vec)
+            
+            
+            
+            n1 = plane_from_points(points_1)  #but we need slope, not normal!!
+            
+            
+            slope_vector = np.cross(n1,edge_vector)
+            
+            
+            if slope_vector[2] <0 :
+                slope_vector = - slope_vector
+                
+            s1 = slope_from_vector(slope_vector)
+
             airy_forces.append(s1)
-        if len(adjoining_cells) == 0:
-            cell_1 = [N_nodes_x - 1,N_nodes_x*N_nodes_y -1,N_nodes_x*3 -1]
-            points_1 = [points[i] for i in cell_1]
-            n1 = plane_from_points(points_1)
-            s1 = slope_from_n(n1)
-            airy_forces.append(s1)
+                
+        if len(adjoining_cells) == 0: #the edge is not in a single cell - either none or one of the points is not in a cell...
+            print('edge not in cell',edge)
+            airy_forces.append(0)
             
     return airy_forces
-f_airy = forces_from_airy(found_points,edges_b,cells)
+
+""" """
+def run_form_find_force_density_airy(points,original_lengths,these_boundary_points,these_boundary_selector,mesh_edges,initial_guess):
+    original_points = points*1
+    
+    vs = points*0
+    ms = points*0+2
+    dt = 0.4
+    
+    f_mean = 0
+    f_hist = []
+    t_hist = []
+    #for t in range(0,10000):
+    t = 0
+    
+    stress_scale = 10000   #stress in kpa
+    scaled_bar_stress_array = original_bar_stress_array*1
+
+    grav_forces = points*0
+    grav_forces = np.transpose(points*0)
+    node_load = 17.5609756097561
+    grav_forces[2] = grav_forces[2] + node_load  #node load in kpa
+    grav_forces = np.transpose(grav_forces)
+    global l_g_f
+    l_g_f = grav_forces
+    reset = False
+    points = initial_guess
+    while t < 10000 or f_mean>node_load/100: #1000 seems reasonable
+        
+        #p = p*boundary_selector+boundaries
+        global points5
+        points5 = points
+        connections_to_other_points = np.rollaxis(get_point_vectorised(connections_to_other_points_ind),2)+valid_finders
+        
+        #we need an equivalent for the original stresses
+        
+        
+        
+        points2 = np.transpose(np.rollaxis(np.expand_dims(points, 0),0))
+        global vectors  #something wrong with vectors? hard to tell
+        vectors = connections_to_other_points-points2
+        vectors=np.nan_to_num(vectors, copy=True) 
+        global z_components
+        z_components = vectors[2] #(441,8)  #seems okay...
+ 
+        #new_bars_attempt  #
+        #original_stress_state is denoted by bar index...
+        #need to get this into array format (441,8)
+        net_fs_in_z = scaled_bar_stress_array*z_components/original_lengths   #(441,8)*(441,8)/(441,8) = (441,8)
+        global nf  #seems okay
+        nf = net_fs_in_z
+        
+        force_vectors = points2*0
+        force_vectors[2] = force_vectors[2] + 1  #so we select the z direction
+        force_vectors = force_vectors*net_fs_in_z
+        force_vectors=np.nan_to_num(force_vectors, copy=True) 
+        global net_force_from_bars   #seems to work now
+        net_force_from_bars = np.transpose(np.sum(force_vectors,axis=2))
+        
+    
+        total_net_force = net_force_from_bars + grav_forces  #- 200*vs
+        global bar_total_force_for_eq_check
+        bar_total_force_for_eq_check = total_net_force
+        
+        bar_force = np.linalg.norm(net_force_from_bars,axis=1)
+        global tf
+        
+        total_forces = np.linalg.norm(total_net_force,axis=1)*np.transpose(these_boundary_selector)
+        tf = total_forces
+        global h
+        
+        f_mean = np.mean(total_forces)   #problem is boundaries have force!
+        h = f_mean
+
+        total_net_force = total_net_force - 12*vs
+        
+        acceleration = total_net_force/ms
+        global g_a,g_v
+        g_a = acceleration
+        g_v = vs
+        points = points*1+vs*dt
+        vs = vs+acceleration*dt
+        
+        """
+        This is as I was having trouble with stability with these nodes, s
+        o I had to use an initial guess where the roof had done a bit of form finding, and then stop these nodes from moving. 
+        
+        They actually only ended up 1KN out of balance with the vertical loads, so a bodge but not a bad one
+        """
+        vs[814] = 0
+        vs[58] = 0
+        
+        points = points*these_boundary_selector +these_boundary_points  #why is this not working? I think it is, maybe a plotting problem
+        
+        f_hist.append(f_mean)
+        t_hist.append(t)
+        if t % 10==0:
+            vs = vs*0
+            reset = True
+        if t % 1000==0:
+            plot_views_quick(points)
+            plt.show()
+            print('f_mean',f_mean)
+            #wait = input('wait')
+        t=t+1
+        
+        
+    #plot_mesh(points,mesh_edges)
+    #plot_views_3D_out_of_balance_force(points,mesh_edges,bar_total_force_for_eq_check,0)
+    plot_views(points, mesh_edges, 0)
+    plot_views(points, mesh_edges, 1)
+    plot_views(points, mesh_edges, 2)
+    plot_views(points, mesh_edges, 3)
+    # plot_views(points, mesh_edges, 4)
+    # plot_views(points, mesh_edges, 5)
 
 
-f_airy_stress = np.transpose(np.array([f_airy])) 
+    return points, bar_force   
+
+""" Finding the forces from the original roof as an airy stress function"""
+f_airy = forces_from_airy(found_points,edges_b,cells_all)
 
 
-plot_frame2D_selfstress(points_2d,edges_b,non_reaction_points,f_airy_stress,1)
+f_airy_stress = np.transpose(np.array([f_airy]))   #don't scale - the resulting roof will then give us the stresses. But probably need to run it a lot faster
 
+""" Checking if it is a valid self stress state"""
+equilibrium_check_airy = is_self_stress_state(eq, f_airy_stress)   #failing.. not a self stress state it seems...
+plot_views_quick_out_of_balance(found_points,equilibrium_check_airy)
+
+""" Plotting the forces"""
+plot_frame2D_selfstress(points_2d,edges_b,non_reaction_points,f_airy_stress,1,True)
+
+#outer_bars_true_self_stress = outer_bars_stress
+
+""" Projecting onto nullspace and plotting for comparison"""
 f_airy_self_stress = np.transpose([project_stress(self_stress_states, f_airy_stress)])
-plot_frame2D_selfstress(points_2d,edges_b,non_reaction_points,f_airy_self_stress,1)
+plot_frame2D_selfstress(points_2d,edges_b,non_reaction_points,f_airy_self_stress,1,False)
 
-original_bar_stress_array = get_original_stress_state(connections_to_other_points_ind, edges_b, f_airy_self_stress, valid_finder) +valid_finders
+
+original_bar_stress_array = get_original_stress_state(connections_to_other_points_ind, edges_b, f_airy_stress, valid_finders) +valid_finders
 original_bar_stress_array = original_bar_stress_array*(-1)
 
-found_points_2 = run_form_find_force_density(points,original_lengths,boundary_points_2,boundary_selector_2,edges_b)
+""" Using an initial guess to get around stability issues I was having with two nodes"""
+initial_guess = np.load('initial_guess_3.npy')
+initial_guess = np.transpose(initial_guess)
+initial_guess[2] = initial_guess[2]*0.8
+initial_guess = np.transpose(initial_guess)
+
+""" Run form finding"""
+found_points_2, bar_forces_2 = run_form_find_force_density_airy(points,original_lengths,boundary_points_2,boundary_selector_2,edges_b,initial_guess)
+
+
+""" Finding the forces from the new airy stress function"""
+f_airy = forces_from_airy(found_points_2,edges_b,cells_all)
+
+f_airy_stress = np.transpose(np.array([f_airy]))  #don't scale - the resulting roof will then give us the stresses. But probably need to run it a lot faster
+
+""" Checking if it is a valid self stress state"""
+equilibrium_check_airy = is_self_stress_state(eq, f_airy_stress)   #failing.. not a self stress state it seems...
+plot_views_quick_out_of_balance(found_points,equilibrium_check_airy)
+
+""" Plotting the forces"""
+plot_frame2D_selfstress(points_2d,edges_b,non_reaction_points,f_airy_stress,1,True)
+
+#outer_bars_true_self_stress = outer_bars_stress
+""" Projecting onto nullspace and plotting for comparison"""
+f_airy_self_stress = np.transpose([project_stress(self_stress_states, f_airy_stress)])
+plot_frame2D_selfstress(points_2d,edges_b,non_reaction_points,f_airy_self_stress,1,False)
